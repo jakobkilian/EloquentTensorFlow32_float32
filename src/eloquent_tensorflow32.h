@@ -107,10 +107,10 @@ namespace Eloquent {
                 }
 
                 /**
-                 * 
+                 * temporary fix by jakobkilian: overload predict() to allow for different input types
                  */
-                template<typename T>
-                Exception& predict(T *x) {
+                // if the input is a int8_t array we need to quantize it first:
+                Exception& predict(int8_t *x) { 
                     // quantize
                     float inputScale = input->params.scale;
                     float inputOffset = input->params.zero_point;
@@ -134,6 +134,27 @@ namespace Eloquent {
 
                     for (uint16_t i = 0; i < numOutputs; i++)
                         outputs[i] = (output->data.int8[0] - outputOffset) * outputScale;
+
+                    return exception.clear();
+                }
+
+                // if the input is a float array we can skip the quantization and need to use input->data.f[i] to input the data
+                Exception& predict(float *x) {
+                    for (uint16_t i = 0; i < numInputs; i++)
+                        input->data.f[i] = x[i];
+
+                    // execute
+                    TfLiteStatus status = interpreter->Invoke();
+
+                    if (status != kTfLiteOk)
+                        return exception.set("Invoke() failed");
+
+                    // allocate outputs
+                    if (outputs == NULL)
+                        outputs = (float*) calloc(numOutputs, sizeof(float));
+                        
+                    for (uint16_t i = 0; i < numOutputs; i++)
+                        outputs[i] = output->data.f[0];
 
                     return exception.clear();
                 }
